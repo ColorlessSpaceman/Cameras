@@ -1,0 +1,198 @@
+from tkinter import *
+from PIL import ImageTk,Image
+import vlc
+import easymodbus
+import time
+import os
+import datetime
+import easymodbus.modbusClient
+from easymodbus.modbusClient import ModbusClient
+import datetime
+import numpy as np
+import threading
+
+#Init
+class App(Frame):
+
+    def __init__(self, master=None):
+        Frame.__init__(self, master)
+        self.master = master
+        self.main_dir = 'C:\\Users\\Adán Ascencio\\Desktop'
+        self.player=vlc.MediaPlayer('rtsp://admin:Moxa1234@192.168.1.108:554/cam/realmonitor?channel=1&subtype=0')
+        self.player.play()
+        self.player2=vlc.MediaPlayer('rtsp://admin:Moxa1234@192.168.1.107:554/cam/realmonitor?channel=1&subtype=0')
+        self.player2.play()
+        self.state=117
+        self.CODE=0
+        self.flag=False
+
+
+    def update(self):
+        print('Hola')
+        current_time = datetime.datetime.now()
+        now = datetime.datetime.now()
+        modbusclient = ModbusClient('192.168.1.109', 502)
+        modbusclient.connect()
+        Codigo = modbusclient.read_holdingregisters(0, 8)
+        signal=modbusclient.read_coils(0,5)
+
+        a1 = (bytes.fromhex(str(hex(Codigo[0]))[2:])).decode("ASCII")
+        a2 = (bytes.fromhex(str(hex(Codigo[1]))[2:])).decode("ASCII")
+        a3 = (bytes.fromhex(str(hex(Codigo[2]))[2:])).decode("ASCII")
+        a4 = (bytes.fromhex(str(hex(Codigo[3]))[2:])).decode("ASCII")
+        a5 = (bytes.fromhex(str(hex(Codigo[4]))[2:])).decode("ASCII")
+        a6 = (bytes.fromhex(str(hex(Codigo[5]))[2:])).decode("ASCII")
+        a7 = (bytes.fromhex(str(hex(Codigo[6]))[2:])).decode("ASCII")
+        EDOC = a1+a2+a3+a4+a5+a6+a7
+        time.sleep(0.5)    
+        EDOC=EDOC[:-1]
+
+        if(self.state!=signal[4]):
+            self.state=signal[4]
+            print(signal[4])
+        
+        if(self.CODE!=EDOC):
+            self.CODE=EDOC
+            print(self.CODE)
+            QR2.configure(text = self.CODE, fg = 'white')
+
+        if signal[4] is False:
+            self.flag=True
+            
+        if signal[4] is True and self.flag is True:
+            self.flag=False
+            print('Proceso Finalizado')
+            path = os.path.join(self.main_dir, self.CODE)
+            directory = self.main_dir+'\\'+self.CODE
+            fecha = now.strftime("%d-%m-%Y-%H.%M.%S")
+            subpath = os.path.join(directory, fecha)
+            cam1 = subpath+'\\'+'camara1.png'
+            cam2 = subpath+'\\'+'camara2.png'
+            cam3 = subpath+'\\'+'camara3.png'
+            cam4 = subpath+'\\'+'camara4.png'
+
+            try:  
+                os.mkdir(path)
+            except OSError as error:  
+                print("Carpeta ya existente")
+
+            try:  
+                os.mkdir(subpath)
+            except OSError as error:  
+                print("Carpeta ya existente")
+
+            while(os.path.isfile(cam1) is False):
+                
+                self.player.video_take_snapshot(0, cam1, 0, 0)
+            
+            while(os.path.isfile(cam2) is False):
+                
+                self.player2.video_take_snapshot(0, cam2, 0, 0)
+            
+            '''
+            while(os.path.isfile(cam3) is False):
+                self.player3.play()
+                self.player3.video_take_snapshot(0, cam3, 0, 0)
+            self.player3.stop()
+            while(os.path.isfile(cam4) is False):
+                self.player4.play()
+                self.player4.video_take_snapshot(0, cam4, 0, 0)
+            self.player4.stop()
+            '''
+            print('Imagenes Capturadas')
+            modbusclient.write_single_coil(0,True)
+            time.sleep(1)
+            modbusclient.write_single_coil(0,False)
+
+            self.foto1 = Image.open(cam1)
+            self.re_foto1 = self.foto1.resize((426, 240), Image.ANTIALIAS)
+            self.foto1_1=ImageTk.PhotoImage(self.re_foto1)
+            lab.configure(image=self.foto1_1)
+
+            self.foto2 = Image.open(cam2)
+            self.re_foto2 = self.foto2.resize((426, 240), Image.ANTIALIAS)
+            self.foto1_2=ImageTk.PhotoImage(self.re_foto2)
+            lab2.configure(image=self.foto1_2)
+        modbusclient.close()
+        root.after(500, ap.update)
+        
+       
+
+#Apartado Grafico
+root=Tk()
+ap = App(root)
+root.title("Camaras")
+root.attributes("-fullscreen", True)
+canvas=Canvas(root, width=1200, height=800)
+canvas.pack()
+
+background_image=PhotoImage(file='back.png')
+background_label=Label(root, image=background_image)
+background_label.place(relwidth=1,relheight=1)
+
+frame=Frame(root, bg='blue', bd=5)
+frame.place(relx=0.5,rely=0.1,relwidth=0.35,relheight=0.06, anchor='center')
+
+title = Label(root,text="DAWS", font=42, bg='gray', fg='white')
+title.pack()
+
+QR = Label(frame,text='Codigo QR:', font=('Arial',20), bg='blue', fg='black')
+QR.place(relx=0,rely=0)
+
+CEO = Label(root,text='SAWS NDD', font=('Arial',20), bg='white', fg='black')
+QR.place(relx=0,rely=0.5)
+
+QR2 = Label(frame,text='Iniciando', font=('Arial',20), bg='blue', fg='black')
+QR2.place(relx=0.4,rely=0)
+
+prueba = Image.open('Default.png')
+ress = prueba.resize((426, 240), Image.ANTIALIAS)
+casi=ImageTk.PhotoImage(ress)
+lab=Label(image=casi)
+lab.place(relx=0.3,rely=0.15,width=426,height=240, anchor='n')
+
+prueba2 = Image.open('Default.png')
+ress2 = prueba2.resize((426, 240), Image.ANTIALIAS)
+casi2=ImageTk.PhotoImage(ress)
+lab2=Label(image=casi2)
+lab2.place(relx=0.7,rely=0.15,width=426,height=240, anchor='n')
+
+
+root.after(500, ap.update)
+
+
+
+class MyDialog:
+    def __init__(self, parent):
+        self.top = Toplevel(parent)
+        self.parent = parent
+        self.top.title("Salir")
+
+        Label(self.top, text="¿Está seguro?").grid(row=0, column=0, columnspan=2)
+
+        self.button1 = Button(self.top, text="Si, salir de la app.", command=self.salir)
+        self.button2 = Button(self.top, text="No, solo minimizar.", command=self.minimizar)
+        self.button1.grid(row=1, column=0, padx=5, pady=5)
+        self.button2.grid(row=1, column=1, padx=5, pady=5)
+
+    def salir(self):
+        self.top.destroy()
+        self.parent.destroy()
+
+    def minimizar(self):
+        self.top.destroy()
+        self.parent.iconify()
+
+
+class MyApp:
+    def __init__(self, parent):
+        self.parent = parent
+        self.parent.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def on_closing(self):
+        d = MyDialog(root)
+        self.parent.wait_window(d.top)
+
+if __name__ == "__main__":
+    app = MyApp(root)
+    root.mainloop()
